@@ -1033,7 +1033,7 @@ elif menu == "Compras":
                     productos_inv = []
                    
 elif menu == "Inventario":
-   st.header("📦 Módulo de Inventario")
+    st.header("📦 Módulo de Inventario")
     
     # Creamos las pestañas incluyendo la nueva de carga masiva
     tab1, tab2, tab3, tab4 = st.tabs(["Consultar / Alertas", "Registrar Producto", "Ajuste Físico (Autorizado)", "Carga Masiva Excel"])
