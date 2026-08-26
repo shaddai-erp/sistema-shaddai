@@ -1223,7 +1223,7 @@ elif menu == "Inventario":
         st.markdown("---")
         
         
-archivo_subido = st.file_uploader("Sube tu plantilla de Excel completada", type=["xlsx", "xls"])
+archivo_subido = st.file_uploader("Sube tu plantilla de Excel completada (Cuentas por Pagar)", type=["xlsx", "xls"], key="uploader_cuentas_por_pagar")
         
 if archivo_subido is not None:
             try:
