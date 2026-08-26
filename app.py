@@ -1311,10 +1311,10 @@ st.markdown("### 📊 Historial de Compras Registradas")
 try:
     import pandas as pd
     df_historial = pd.read_sql("SELECT fecha, proveedor, num_documento, tipo_documento, condicion_pago, fecha_vencimiento, total_pagar FROM compras WHERE empresa_id = ? ORDER BY id DESC LIMIT 10", conn, params=(empresa_actual,))
-        if not df_historial.empty:
-            st.dataframe(df_historial, use_container_width=True)
+    if not df_historial.empty:
+        st.dataframe(df_historial, use_container_width=True)
     else:
-            st.info("No hay compras registradas todavía.")
+        st.info("No hay compras registradas todavía.")
     except:
         st.info("Aún no se visualiza el historial.")
     finally:
