@@ -1317,8 +1317,8 @@ try:
         st.info("No hay compras registradas todavía.")
 except:
     st.info("Aún no se visualiza el historial.")
-    finally:
-        conn.close()
+finally:
+    conn.close()
 
 elif menu == "Cuentas por Pagar":
     st.header("💳 Gestión de Cuentas por Pagar")
