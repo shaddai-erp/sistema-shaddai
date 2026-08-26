@@ -1,5 +1,7 @@
-
 streamlit
 pandas
 openpyxl
 weasyprint
+pyBCV
+requests
+beautifulsoup4
