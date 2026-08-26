@@ -1,0 +1,926 @@
+[4:20 p. m., 8/7/2026] José Franco: import streamlit as st
+import sqlite3
+import pandas as pd
+from datetime import datetime, timedelta
+
+# Configuración de la página
+st.set_page_config(page_title="Sistema ERP - SHADDAI 2021", layout="wide")
+
+st.title("📦 Sistema ERP - SHADDAI 2021 - GESTION INTEGRAL")
+
+# =========================================================================
+# 🛠️ REPARACIÓN FORZADA E INMEDIATA DE LA BASE DE DATOS (MIGRACIÓN INICIAL)
+# =========================================================================
+# Este bloque se ejecuta antes que todo lo demás para asegurar la estructura correcta.
+try:
+    conn_patch = sqlite3.connect("mi_negocio.db")
+    cursor_patch = conn_patch.cursor()
+    
+    # Asegurar que la tabla CxP exista
+    cursor_patch.execute('''
+        CREATE TAB…
+[4:31 p. m., 8/7/2026] José Franco: # --- DISEÑO DE PESTAÑAS ---
+    tab_ventas, tab_registro, tab_proveedores, tab_clientes, tab_compras, tab_cxp, tab_categorias, tab_historial, tab_gerente = st.tabs([
+        "🛒 Facturación y Ventas",
+        "📦 Inventario y Registro",
+        "🤝 Directorio Proveedores",
+        "👥 Clientes",  # <--- AGREGAMOS ESTA PESTAÑA
+        "🧾 Registro de Compras / SENIAT",
+        "📊 Cuentas por Pagar (CxP)",
+        "⚙️ Clasificaciones",
+        "📜 Historial de Movimientos",
+        "🔒 Panel Gerencial"
+    ])
+[4:54 p. m., 8/7/2026] José Franco: from fpdf import FPDF
+
+def imprimir_factura_sobre_formato(nombre_cliente, rif_cliente, direccion_cliente, productos, total):
+    # Creamos un PDF transparente (sin líneas, solo los textos)
+    pdf = FPDF(orientation='P', unit='mm', format='Letter')
+    pdf.add_page()
+    pdf.set_font("Arial", size=11)
+    
+    # --- AQUÍ DEFINIMOS LAS COORDENADAS (X, Y) ---
+    # X es la distancia desde la izquierda, Y es la distancia desde arriba
+    pdf.text(35, 65, f"{nombre_cliente}")   # Nombre o Razón Social
+    pdf.text(35, 72, f"{rif_cliente}")      # No. de RIF
+    pdf.text(120, 72, "0412-1234567")       # Teléfono (ejemplo)
+    
+    # Imprimir productos
+    y_pos = 100 
+    for item in productos:
+        pdf.text(35, y_pos, item['desc'])   # Producto
+        pdf.te…
+[11:08 a. m., 9/7/2026] José Franco: import streamlit as st
+import sqlite3
+import pandas as pd
+from datetime import datetime, timedelta
+
+from fpdf import FPDF
+
+def imprimir_factura_sobre_formato(nombre_cliente, rif_cliente, direccion_cliente, productos, total):
+    # Creamos un PDF transparente (sin líneas, solo los textos)
+    pdf = FPDF(orientation='P', unit='mm', format='Letter')
+    pdf.add_page()
+    pdf.set_font("Arial", size=11)
+    
+    # --- AQUÍ DEFINIMOS LAS COORDENADAS (X, Y) ---
+    # X es la distancia desde la izquierda, Y es la distancia desde arriba
+    pdf.text(35, 65, f"{nombre_cliente}")   # Nombre o Razón Social
+    pdf.text(35, 72, f"{rif_cliente}")      # No. de RIF
+    pdf.text(120, 72, "0412-1234567")       # Teléfono (ejemplo)
+    
+    # Imprimir productos
+    y_pos = 100 
+    for item in productos:
+        pdf.text(35, y_pos, item['desc'])   # Producto
+        pdf.text(140, y_pos, str(item['cant'])) # Cantidad
+        y_pos += 7 # Salto de línea
+        
+    pdf.text(170, 250, f"{total}")          # Total a pagar
+    
+    pdf.output("factura_lista.pdf")
+
+# Configuración de la página
+st.set_page_config(page_title="Sistema ERP - SHADDAI 2021", layout="wide")
+
+st.title("📦 Sistema ERP - SHADDAI 2021 - GESTION INTEGRAL")
+
+# =========================================================================
+# 🛠️ REPARACIÓN FORZADA E INMEDIATA DE LA BASE DE DATOS (MIGRACIÓN INICIAL)
+# =========================================================================
+# Este bloque se ejecuta antes que todo lo demás para asegurar la estructura correcta.
+try:
+    conn_patch = sqlite3.connect("mi_negocio.db")
+    cursor_patch = conn_patch.cursor()
+    
+    # Asegurar que la tabla CxP exista
+    cursor_patch.execute('''
+        CREATE TABLE IF NOT EXISTS cuentas_por_pagar (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id_compra INTEGER,
+            proveedor TEXT,
+            num_factura TEXT,
+            monto_original REAL,
+            saldo_pendiente REAL,
+            fecha_vencimiento TEXT,
+            estado TEXT
+        )''')
+    conn_patch.commit()
+
+    # Verificar y agregar columnas faltantes una por una
+    cursor_patch.execute("PRAGMA table_info(cuentas_por_pagar)")
+    columnas_existentes = [col[1] for col in cursor_patch.fetchall()]
+    
+    if "num_factura" not in columnas_existentes:
+        cursor_patch.execute("ALTER TABLE cuentas_por_pagar ADD COLUMN num_factura TEXT DEFAULT ''")
+        conn_patch.commit()
+        
+    if "id_compra" not in columnas_existentes:
+        cursor_patch.execute("ALTER TABLE cuentas_por_pagar ADD COLUMN id_compra INTEGER DEFAULT 0")
+        conn_patch.commit()
+
+    conn_patch.close()
+except Exception as e:
+    st.error(f"⚠️ Alerta de inicialización de Base de Datos: {e}")
+
+
+# --- FUNCIÓN BASE DE DATOS LIMPIA E INTEGRAL ---
+def conectar_db():
+    conn = sqlite3.connect("mi_negocio.db")
+    cursor = conn.cursor()
+    
+    # 1. Tabla Inventario
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS inventario (
+            codigo TEXT,
+            descripcion TEXT,
+            existencia REAL,
+            costo REAL,
+            precio REAL,
+            sucursal TEXT,
+            clasificacion TEXT,
+            unidad TEXT,
+            stock_minimo REAL DEFAULT 0,
+            PRIMARY KEY (codigo, sucursal)
+        )''')
+    
+    # 2. Tabla Categorías
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS categorias (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre TEXT UNIQUE
+        )''')
+    
+    # 3. Tabla Movimientos
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS movimientos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            fecha TEXT,
+            codigo TEXT,
+            tipo_movimiento TEXT,
+            cantidad REAL,
+            sucursal TEXT
+        )''')
+    
+    # 4. Tabla de Proveedores
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS proveedores (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            rif TEXT UNIQUE,
+            razon_social TEXT,
+            direccion TEXT,
+            telefono TEXT
+        )''')
+    
+    # 5. Tabla de Compras
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS compras (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tipo_doc TEXT,
+            num_documento TEXT,
+            num_control TEXT,
+            proveedor_rif TEXT,
+            proveedor_nombre TEXT,
+            fecha_compra TEXT,
+            monto_total REAL,
+            base_imponible REAL DEFAULT 0,
+            monto_iva REAL DEFAULT 0,
+            retencion_applied REAL DEFAULT 0,
+            tipo_pago TEXT,
+            estado TEXT
+        )''')
+
+    # 6. Tabla de Cuentas por Pagar (CxP)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS cuentas_por_pagar (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id_compra INTEGER,
+            proveedor TEXT,
+            num_factura TEXT,
+            monto_original REAL,
+            saldo_pendiente REAL,
+            fecha_vencimiento TEXT,
+            estado TEXT,
+            FOREIGN KEY(id_compra) REFERENCES compras(id)
+        )''')
+
+    # 7. Tabla de Carrito Temporal de Compras
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS carrito_temporal (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            codigo TEXT,
+            descripcion TEXT,
+            cantidad REAL,
+            costo_unitario REAL,
+            subtotal REAL,
+            es_nuevo INTEGER,
+            clasificacion TEXT,
+            unidad TEXT,
+            precio_venta REAL
+        )''')
+
+    # 8. Tabla de Clientes
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS clientes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cedula_rif TEXT UNIQUE,
+            razon_social TEXT,
+            telefono TEXT,
+            direccion TEXT
+        )''')
+
+    # 9. Tabla de Ventas
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS ventas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            fecha_venta TEXT,
+            cliente_doc TEXT,
+            cliente_nombre TEXT,
+            monto_bruto REAL,
+            descuento_aplicado REAL,
+            monto_final_neto REAL,
+            condicion_pago TEXT,
+            metodo_pago TEXT,
+            estado TEXT
+        )''')
+
+    # 10. Tabla de Carrito Temporal de Ventas
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS carrito_ventas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            codigo TEXT,
+            descripcion TEXT,
+            cantidad REAL,
+            precio_lista REAL,
+            subtotal REAL
+        )''')
+        
+    conn.commit()
+    return conn
+
+# Inicializar esquemas completos y cerrar conexión inicial
+conn_init = conectar_db()
+conn_init.close()
+
+# Poblar categorías iniciales si no existen
+conn = conectar_db()
+cursor = conn.cursor()
+cursor.execute("SELECT COUNT(*) FROM categorias")
+if cursor.fetchone()[0] == 0:
+    for cat in ["Pinturas", "Pintura Automotriz", "Ferretería", "Tornillería", "Electricidad", "Herramientas", "Iluminación", "Otros / Varios"]:
+        try:
+            cursor.execute("INSERT INTO categorias (nombre) VALUES (?)", (cat,))
+        except sqlite3.IntegrityError:
+            pass
+    conn.commit()
+conn.close()
+
+lista_unidades = ["Unidad (und)", "Litro (lt)", "Mililitro (ml)", "Galón (gal)", "Kilogramo (kg)", "Metro (mt)"]
+SUCURSAL_UNICA = "Tienda Principal"
+
+# --- DISEÑO DE PESTAÑAS ---
+tab_ventas, tab_registro, tab_proveedores, tab_clientes, tab_compras, tab_cxp, tab_categorias, tab_historial, tab_gerente = st.tabs([
+        "🛒 Facturación y Ventas",
+        "📦 Inventario y Registro",
+        "🤝 Directorio Proveedores",
+        "👥 Clientes",  # <--- AGREGAMOS ESTA PESTAÑA
+        "🧾 Registro de Compras / SENIAT",
+        "📊 Cuentas por Pagar (CxP)",
+        "⚙️ Clasificaciones",
+        "📜 Historial de Movimientos",
+        "🔒 Panel Gerencial"
+    ])
+# =========================================================================
+# --- PESTAÑA 0: FACTURACIÓN Y VENTAS ---
+# =========================================================================
+with tab_ventas:
+    def buscar_cliente_por_doc():
+        doc_ingresado = st.session_state.get("venta_cedula_rif", "").upper().strip()
+        if doc_ingresado:
+            conn_b = conectar_db()
+            cursor_b = conn_b.cursor()
+            cursor_b.execute("SELECT razon_social, telefono, direccion FROM clientes WHERE cedula_rif = ?", (doc_ingresado,))
+            res = cursor_b.fetchone()
+            conn_b.close()
+            if res:
+                st.session_state["v_nombre"] = res[0]
+                st.session_state["v_tel"] = res[1]
+                st.session_state["v_dir"] = res[2]
+
+    st.subheader("🧾 Mostrador de Ventas")
+    
+    st.markdown("#### 👥 1. Datos del Cliente")
+    col_cl1, col_cl2 = st.columns(2)
+    with col_cl1:
+        v_doc = st.text_input("Cédula o RIF del Cliente:", key="venta_cedula_rif", on_change=buscar_cliente_por_doc).upper().strip()
+        v_nombre = st.text_input("Nombre o Razón Social:", key="v_nombre")
+    with col_cl2:
+        v_tel = st.text_input("Teléfono de Contacto:", key="v_tel")
+        v_dir = st.text_input("Dirección Fiscal:", key="v_dir")
+
+    st.markdown("---")
+
+    st.markdown("#### 📦 2. Cargar Artículos (Precios Base de Lista)")
+    col_prod1, col_prod2 = st.columns([3, 1])
+    
+    conn_i = conectar_db()
+    df_inv_v = pd.read_sql_query("SELECT codigo, descripcion, precio, existencia FROM inventario WHERE sucursal = 'Tienda Principal' AND existencia > 0", conn_i)
+    conn_i.close()
+    
+    lista_prods_v = [f"{row['codigo']} - {row['descripcion']} (Precio Lista: ${row['precio']:.2f} | Stock: {row['existencia']})" for _, row in df_inv_v.iterrows()]
+    
+    with col_prod1:
+        prod_seleccionado = st.selectbox("Seleccione Producto:", [""] + lista_prods_v, key="v_sel_prod")
+    with col_prod2:
+        cant_v = st.number_input("Cantidad:", min_value=0.1, step=1.0, value=1.0, key="v_cant")
+    
+    if st.button("➕ Agregar a la Factura", key="btn_add_car_venta", type="secondary"):
+        if prod_seleccionado == "":
+            st.error("❌ Seleccione un producto válido.")
+        else:
+            cod_ex = prod_seleccionado.split(" - ")[0]
+            desc_ex = prod_seleccionado.split(" - ")[1].split(" (Precio")[0]
+            stock_actual = float(df_inv_v[df_inv_v['codigo'] == cod_ex]['existencia'].values[0])
+            precio_lista_ex = float(df_inv_v[df_inv_v['codigo'] == cod_ex]['precio'].values[0])
+            
+            if cant_v > stock_actual:
+                st.error(f"❌ Existencia insuficiente ({stock_actual} disponibles).")
+            else:
+                conn_add = conectar_db()
+                cursor_add = conn_add.cursor()
+                subtotal_v = cant_v * precio_lista_ex
+                cursor_add.execute("INSERT INTO carrito_ventas (codigo, descripcion, cantidad, precio_lista, subtotal) VALUES (?, ?, ?, ?, ?)",
+                                   (cod_ex, desc_ex, cant_v, precio_lista_ex, subtotal_v))
+                conn_add.commit()
+                conn_add.close()
+                st.rerun()
+
+    conn_car = conectar_db()
+    df_car_v = pd.read_sql_query("SELECT id as 'Item', codigo as 'Código', descripcion as 'Descripción', cantidad as 'Cant', precio_lista as 'Precio Lista ($)', subtotal as 'Subtotal ($)' FROM carrito_ventas", conn_car)
+    conn_car.close()
+
+    if not df_car_v.empty:
+        st.markdown("### 📝 Vista Previa del Pedido")
+        st.dataframe(df_car_v, use_container_width=True)
+        
+        col_del_v1, col_del_v2 = st.columns([2, 2])
+        with col_del_v1:
+            item_a_borrar_v = st.selectbox("¿Error de dedo? Seleccione el número de Item para eliminarlo:", [""] + list(df_car_v['Item'].astype(str)), key="sel_borrar_v")
+        with col_del_v2:
+            st.markdown("##")
+            if st.button("❌ Eliminar Ítem Seleccionado", key="btn_borrar_item_v"):
+                if item_a_borrar_v != "":
+                    conn_del_i = conectar_db()
+                    conn_del_i.cursor().execute("DELETE FROM carrito_ventas WHERE id = ?", (item_a_borrar_v,))
+                    conn_del_i.commit()
+                    conn_del_i.close()
+                    st.rerun()
+        
+        total_precio_lista = df_car_v['Subtotal ($)'].sum()
+        
+        st.markdown("---")
+        st.markdown("#### 💳 3. Selección Estratégica de Pago (Descuentos y Cashea)")
+        
+        col_pg1, col_pg2 = st.columns(2)
+        with col_pg1:
+            v_condicion = st.selectbox("Condición de Venta:", ["Contado", "Crédito", "Cashea"], key="v_cond")
+        with col_pg2:
+            if v_condicion == "Contado":
+                v_metodo = st.selectbox("Método de Pago:", ["Dólares Efectivo / Binance USDT", "Bolívares (Pago Móvil / Punto)"], key="v_metodo")
+            elif v_condicion == "Cashea":
+                v_metodo = st.selectbox("Método de Pago:", ["Línea de Crédito Cashea (Aplica Comisión 7%)"], key="v_metodo")
+            else:
+                v_metodo = st.selectbox("Método de Pago:", ["Crédito Comercial / Cuenta Abierta"], key="v_metodo")
+
+        porcentaje_desc = 0.0
+        nota_comision = ""
+        
+        if v_condicion == "Contado":
+            if "Dólares" in v_metodo:
+                porcentaje_desc = 0.15
+                nota_comision = "✨ ¡Descuento de Incentivo del 15% aplicado por pago en Divisas/USDT Liquidez Pura!"
+            else:
+                porcentaje_desc = 0.05
+                nota_comision = "✨ Descuento del 5% aplicado por pago de contado en Bolívares."
+        elif v_condicion == "Cashea":
+            porcentaje_desc = 0.00
+            nota_comision = "⚠️ Se cobra el Precio de Lista Full para absorber el 7% de comisión de la plataforma Cashea."
+
+        monto_descuento_usd = total_precio_lista * porcentaje_desc
+        total_final_v = total_precio_lista - monto_descuento_usd
+        total_final_con_iva = total_final_v * 1.16
+
+        st.info(nota_comision)
+        c_m1, c_m2, c_m3 = st.columns(3)
+        c_m1.metric("Monto Base Lista ($)", f"{total_precio_lista:.2f}")
+        c_m2.metric("Descuento Otorgado ($)", f"-{monto_descuento_usd:.2f} ({int(porcentaje_desc*100)}%)")
+        c_m3.metric("TOTAL NETO A COBRAR (Con IVA) ($)", f"{total_final_con_iva:.2f}")
+
+        col_acc1, col_acc2 = st.columns(2)
+        with col_acc1:
+            if st.button("🚀 CONSOLIDAR Y PROCESAR VENTA", type="primary", key="btn_emitir_venta"):
+                if v_doc == "" or v_nombre == "":
+                    st.error("❌ Los datos de identificación del cliente son obligatorios.")
+                else:
+                    try:
+                        conn_proc = conectar_db()
+                        cursor_p = conn_proc.cursor()
+                        fecha_hoy = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        
+                        cursor_p.execute("INSERT OR IGNORE INTO clientes (cedula_rif, razon_social, telefono, direccion) VALUES (?, ?, ?, ?)",
+                                         (v_doc, v_nombre, v_tel, v_dir))
+                        
+                        cursor_p.execute('''
+                            INSERT INTO ventas (fecha_venta, cliente_doc, cliente_nombre, monto_bruto, descuento_aplicado, monto_final_neto, condicion_pago, metodo_pago, estado)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', (fecha_hoy, v_doc, v_nombre, total_precio_lista, monto_descuento_usd, total_final_con_iva, v_condicion, v_metodo, "Cobrado" if v_condicion != "Crédito" else "Por Cobrar"))
+                        
+                        cursor_p.execute("SELECT codigo, cantidad FROM carrito_ventas")
+                        items_v = cursor_p.fetchall()
+                        for item_v in items_v:
+                            c_cod, c_cant = item_v
+                            cursor_p.execute("UPDATE inventario SET existencia = existencia - ? WHERE codigo = ? AND sucursal = 'Tienda Principal'", (c_cant, c_cod))
+                            cursor_p.execute("INSERT INTO movimientos (fecha, codigo, tipo_movimiento, cantidad, sucursal) VALUES (?, ?, 'VENTA (Mostrador)', ?, 'Tienda Principal')",
+                                             (fecha_hoy, c_cod, c_cant))
+                        
+                        cursor_p.execute("DELETE FROM carrito_ventas")
+                        conn_proc.commit()
+                        conn_proc.close()
+                        st.success("🎉 ¡Venta facturada con éxito! Stock rebajado.")
+                        st.balloons()
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error al procesar venta: {str(e)}")
+        with col_acc2:
+            if st.button("🗑️ Cancelar / Vaciar Carrito", key="btn_clear_v"):
+                conn_del = conectar_db()
+                conn_del.cursor().execute("DELETE FROM carrito_ventas")
+                conn_del.commit()
+                conn_del.close()
+                st.rerun()
+    else:
+        st.info("💡 El mostrador de facturación está listo. Seleccione los productos arriba para cotizarle al cliente.")
+
+with tab_clientes:
+    st.subheader("👥 Lista de Clientes Registrados")
+    conn = conectar_db()
+    df_cli = pd.read_sql_query("SELECT cedula_rif as 'Cédula/RIF', razon_social as 'Razón Social', telefono as 'Teléfono', direccion as 'Dirección' FROM clientes", conn)
+    conn.close()
+    st.dataframe(df_cli, use_container_width=True)
+    
+# --- PESTAÑA 1: INVENTARIO Y REGISTRO ---
+with tab_registro:
+    conn = conectar_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT nombre FROM categorias ORDER BY nombre ASC")
+    lista_categorias = [row[0] for row in cursor.fetchall()]
+    conn.close()
+
+    st.markdown(f"### 📋 Existencias en Inventario — {SUCURSAL_UNICA}")
+    busqueda = st.text_input("🔍 Buscar producto...", key="search_inv")
+    
+    conn = conectar_db()
+    df = pd.read_sql_query("SELECT codigo as 'Código', descripcion as 'Descripción', clasificacion as 'Clasificación', existencia as 'Existencia', unidad as 'Medida', costo as 'Costo (USD)', precio as 'Precio (USD)' FROM inventario WHERE sucursal = 'Tienda Principal' ORDER BY codigo ASC", conn)
+    conn.close()
+
+    if not df.empty and busqueda.strip() != "":
+        df = df[df['Código'].str.lower().str.contains(busqueda.lower()) | df['Descripción'].str.lower().str.contains(busqueda.lower())]
+    st.dataframe(df, use_container_width=True)
+
+    st.markdown("---")
+    st.markdown("### ➕ Registrar Nuevo Producto Directo a Inventario")
+    col_r1, col_r2 = st.columns(2)
+    with col_r1:
+        codigo = st.text_input("Código del Producto", key="reg_cod")
+        descripcion = st.text_input("Descripción", key="reg_desc")
+        costo = st.number_input("Costo de Compra (USD)", min_value=0.0, step=0.1, key="reg_costo")
+        precio = st.number_input("Precio de Venta (USD)", min_value=0.0, step=0.1, key="reg_precio")
+    with col_r2:
+        existencia = st.number_input("Existencia Inicial", min_value=0.0, step=1.0, key="reg_exist")
+        stock_min = st.number_input("Stock Mínimo", min_value=0.0, step=1.0, key="reg_min")
+        clasificacion = st.selectbox("Clasificación", lista_categorias if lista_categorias else ["Ferretería"], key="reg_clas")
+        unidad = st.selectbox("Unidad de Medida", lista_unidades, key="reg_uni")
+
+    if st.button("Guardar Producto Nuevo", type="primary", key="btn_save_prod"):
+        if codigo.strip() == "" or descripcion.strip() == "":
+            st.error("❌ Código y descripción obligatorios.")
+        else:
+            try:
+                conn = conectar_db()
+                cursor = conn.cursor()
+                cursor.execute("INSERT INTO inventario VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", 
+                               (codigo.strip(), descripcion.strip(), existencia, costo, precio, SUCURSAL_UNICA, clasificacion, unidad, stock_min))
+                if existencia > 0:
+                    cursor.execute("INSERT INTO movimientos (fecha, codigo, tipo_movimiento, cantidad, sucursal) VALUES (?, ?, 'ENTRADA (Inicial)', ?, ?)",
+                                   (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), codigo.strip(), existencia, SUCURSAL_UNICA))
+                conn.commit()
+                conn.close()
+                st.success("✅ Guardado con éxito en Tienda Principal!")
+                st.rerun()
+            except sqlite3.IntegrityError:
+                st.error("❌ Código ya registrado en esta tienda.")
+
+# --- PESTAÑA 2: PROVEEDORES ---
+# Inicializar variables en sesión si no existen
+if 'datos_prov' not in st.session_state:
+    st.session_state.datos_prov = {'nombre': '', 'tlf': '', 'dir': ''}
+
+with tab_proveedores:
+    st.markdown("### 🤝 Registrar Proveedor (Datos Fiscales SENIAT)")
+
+    # Función que busca el proveedor cuando cambia el RIF
+    def buscar_proveedor():
+        rif_buscado = st.session_state.p_rif.upper().strip()
+        conn = conectar_db()
+        cursor = conn.cursor()
+        # Asegúrate que 'rif', 'nombre', 'telefono', 'direccion' coincidan con tu tabla
+        cursor.execute("SELECT nombre, telefono, direccion FROM proveedores WHERE rif = ?", (rif_buscado,))
+        resultado = cursor.fetchone()
+        conn.close()
+        
+        if resultado:
+            st.session_state.datos_prov = {'nombre': resultado[0], 'tlf': resultado[1], 'dir': resultado[2]}
+        else:
+            st.session_state.datos_prov = {'nombre': '', 'tlf': '', 'dir': ''}
+
+    col_p1, col_p2 = st.columns(2)
+    with col_p1:
+        prov_rif = st.text_input("RIF del Proveedor", key="p_rif", on_change=buscar_proveedor)
+        prov_nombre = st.text_input("Razón Social", value=st.session_state.datos_prov['nombre'], key="p_razon")
+    with col_p2:
+        prov_telefono = st.text_input("Teléfono", value=st.session_state.datos_prov['tlf'], key="p_tlf")
+        prov_direccion = st.text_area("Dirección Fiscal", value=st.session_state.datos_prov['dir'], key="p_dir")
+
+    if st.button("Guardar Proveedor", type="primary", key="btn_save_prov"):
+        if not prov_rif or not prov_nombre:
+            st.error("❌ Campos obligatorios vacíos.")
+        else:
+            try:
+                conn = conectar_db()
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT OR REPLACE INTO proveedores (rif, nombre, telefono, direccion) 
+                    VALUES (?, ?, ?, ?)
+                """, (prov_rif, prov_nombre, prov_telefono, prov_direccion))
+                conn.commit()
+                conn.close()
+                st.success("✅ Proveedor guardado correctamente.")
+            except Exception as e:
+                st.error(f"Error al guardar: {e}")
+
+                st.markdown("---")
+    st.subheader("📋 Lista de Proveedores Registrados")
+    conn = conectar_db()
+    # Usamos las columnas confirmadas en tu base de datos
+    df_prov = pd.read_sql_query("SELECT rif as 'RIF', razon_social as 'Razón Social', telefono as 'Teléfono', direccion as 'Dirección' FROM proveedores", conn)
+    conn.close()
+    st.dataframe(df_prov, use_container_width=True)
+                
+# --- PESTAÑA 3: REGISTRO DE COMPRAS ---
+with tab_compras:
+    def buscar_proveedor_por_rif():
+        rif_ingresado = st.session_state.get("compra_rif", "").upper().strip()
+        if rif_ingresado:
+            conn_busqueda = conectar_db()
+            cursor_b = conn_busqueda.cursor()
+            cursor_b.execute("SELECT razon_social, direccion, telefono FROM proveedores WHERE rif = ?", (rif_ingresado,))
+            resultado = cursor_b.fetchone()
+            conn_busqueda.close()
+            if resultado:
+                st.session_state["compra_nombre"] = resultado[0]
+                st.session_state["compra_dir"] = resultado[1]
+                st.session_state["compra_tel"] = resultado[2]
+
+    st.subheader("📦 Registro de Compras y Documentos")
+    
+    col_doc1, col_doc2 = st.columns(2)
+    with col_doc1:
+        rif_fisc = st.text_input("RIF del Proveedor:", key="compra_rif", on_change=buscar_proveedor_por_rif).upper().strip()
+        nombre_fisc = st.text_input("Razón Social / Nombre:", key="compra_nombre")
+        tipo_documento = st.selectbox("Tipo de Documento:", ["Factura Fiscal", "Nota de Entrega"], key="compra_tipo_doc")
+    with col_doc2:
+        num_documento = st.text_input("Número de Documento (Factura/Nota):", key="compra_num_doc")
+        num_control = st.text_input("Número de Control (Si aplica):", key="compra_num_control")
+        tipo_pago = st.selectbox("Condición de Pago:", ["Contado", "Crédito"], key="compra_tipo_pago")
+
+    dias_credito = 0
+    if tipo_pago == "Crédito":
+        dias_credito = st.number_input("Días de Crédito:", min_value=1, max_value=120, value=15, step=1)
+
+    retencion_pct = "0%"
+    if tipo_documento == "Factura Fiscal":
+        retencion_pct = st.selectbox("Retención de IVA:", ["75%", "100%", "0%"], key="compra_ret_iva")
+    else:
+        st.caption("ℹ️ Nota de Entrega Detectada: Documento exento de IVA y Retenciones según regulación fiscal (Monto Neto).")
+
+    with st.expander("🔍 Datos adicionales del Proveedor"):
+        col_prov1, col_prov2 = st.columns(2)
+        with col_prov1:
+            direccion_fisc = st.text_input("Dirección Fiscal:", key="compra_dir")
+        with col_prov2:
+            telefono_fisc = st.text_input("Teléfono de Contacto:", key="compra_tel")
+
+    fecha_documento_fisco = st.date_input("Fecha del Documento:", key="compra_fecha_doc")
+
+    if rif_fisc != "" and nombre_fisc != "":
+        st.markdown("---")
+        st.markdown("### 📥 Cargar Ítems a este Documento")
+        
+        col_item1, col_item2, col_item3, col_item4 = st.columns([1.5, 2, 1, 1])
+        with col_item1:
+            c_codigo = st.text_input("Código Artículo:", key="c_item_cod").strip()
+        with col_item2:
+            c_desc = st.text_input("Descripción Artículo:", key="c_item_desc")
+        with col_item3:
+            c_cant = st.number_input("Cantidad Recibida:", min_value=0.1, step=1.0, value=1.0, key="c_item_cant")
+        with col_item4:
+            c_costo = st.number_input("Costo Unitario ($):", min_value=0.0, step=0.1, value=0.0, key="c_item_costo")
+
+        col_item5, col_item6, col_item7 = st.columns(3)
+        with col_item5:
+            c_pv = st.number_input("Establecer Precio Venta ($):", min_value=0.0, step=0.1, value=0.0, key="c_item_pv")
+        with col_item6:
+            c_clas = st.selectbox("Clasificación Prod:", lista_categorias if lista_categorias else ["Ferretería"], key="c_item_clas")
+        with col_item7:
+            c_uni = st.selectbox("Medida Prod:", lista_unidades, key="c_item_uni")
+
+        if st.button("➕ Añadir Artículo al Documento", key="btn_add_item_compra"):
+            if c_codigo == "" or c_desc == "":
+                st.error("❌ Código y Descripción son campos obligatorios para añadir.")
+            else:
+                conn_ins = conectar_db()
+                cursor_ins = conn_ins.cursor()
+                subtotal_item = c_cant * c_costo
+                cursor_ins.execute('''
+                    INSERT INTO carrito_temporal (codigo, descripcion, cantidad, costo_unitario, subtotal, es_nuevo, clasificacion, unidad, precio_venta)
+                    VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)
+                ''', (c_codigo, c_desc, c_cant, c_costo, subtotal_item, c_clas, c_uni, c_pv))
+                conn_ins.commit()
+                conn_ins.close()
+                st.success(f"✅ ¡{c_desc} añadido provisionalmente!")
+                st.rerun()
+
+    st.markdown("---")
+    
+    conn = conectar_db()
+    df_carrito_db = pd.read_sql_query("SELECT id as 'Item', codigo as 'Código', descripcion as 'Descripción', cantidad as 'Cant', costo_unitario as 'Costo ($)', subtotal as 'Subtotal ($)' FROM carrito_temporal", conn)
+    conn.close()
+
+    if not df_carrito_db.empty:
+        st.markdown("### 📋 Vista Previa del Documento Actual")
+        st.dataframe(df_carrito_db, use_container_width=True)
+        
+        col_del_c1, col_del_c2 = st.columns([2, 2])
+        with col_del_c1:
+            item_a_borrar_c = st.selectbox("¿Error de dedo? Seleccione el número de Item para eliminarlo:", [""] + list(df_carrito_db['Item'].astype(str)), key="sel_borrar_c")
+        with col_del_c2:
+            st.markdown("##")
+            if st.button("❌ Eliminar Ítem Seleccionado", key="btn_borrar_item_c"):
+                if item_a_borrar_c != "":
+                    conn_del_c = conectar_db()
+                    conn_del_c.cursor().execute("DELETE FROM carrito_temporal WHERE id = ?", (item_a_borrar_c,))
+                    conn_del_c.commit()
+                    conn_del_c.close()
+                    st.rerun()
+        
+        base_imponible_total = df_carrito_db['Subtotal ($)'].sum()
+        
+        if tipo_documento == "Factura Fiscal":
+            monto_iva_total = base_imponible_total * 0.16
+            monto_completo_factura = base_imponible_total + monto_iva_total
+            
+            retencion_total = 0.0
+            if retencion_pct == "75%":
+                retencion_total = monto_iva_total * 0.75
+            elif retencion_pct == "100%":
+                retencion_total = monto_iva_total * 1.0
+                
+            neto_a_proveedor_cxp = monto_completo_factura - retencion_total
+        else:
+            monto_iva_total = 0.0
+            monto_completo_factura = base_imponible_total
+            retencion_total = 0.0
+            neto_a_proveedor_cxp = base_imponible_total
+
+        st.markdown("#### Meta-Resumen Financiero:")
+        c_tot1, c_tot2, c_tot3 = st.columns(3)
+        if tipo_documento == "Factura Fiscal":
+            c_tot1.metric("Base Imponible ($)", f"{base_imponible_total:.2f}")
+            c_tot2.metric("Monto IVA (16%) ($)", f"{monto_iva_total:.2f}")
+            c_tot3.metric("Total Neto a Pagar (Menos Ret.) ($)", f"{neto_a_proveedor_cxp:.2f}")
+            if retencion_total > 0:
+                st.warning(f"🧾 Monto retenido de IVA que debes declarar: ${retencion_total:.2f}")
+        else:
+            c_tot1.metric("Monto Neto Total ($)", f"{base_imponible_total:.2f}")
+            c_tot2.metric("Monto IVA ($)", "0.00 (Exento)")
+            c_tot3.metric("Total a Pagar a Proveedor ($)", f"{neto_a_proveedor_cxp:.2f}")
+
+        st.markdown("---")
+
+        if st.button("💾 REGISTRAR DOCUMENTO COMPLETO", type="primary", key="btn_submit_compra"):
+            factura_en_memoria = str(st.session_state.get("compra_num_doc", num_documento)).strip()
+            rif_real = str(st.session_state.get("compra_rif", rif_fisc)).strip()
+            nombre_real = str(st.session_state.get("compra_nombre", nombre_fisc)).strip()
+            direccion_real = str(st.session_state.get("compra_dir", direccion_fisc)).strip()
+            telefono_real = str(st.session_state.get("compra_tel", telefono_fisc)).strip()
+            
+            if factura_en_memoria == "":
+                st.error("❌ Debe ingresar el número de Factura / Nota para archivar la compra.")
+            else:
+                try:
+                    conn = conectar_db()
+                    cursor = conn.cursor()
+                    fecha_emision_str = fecha_documento_fisco.strftime("%Y-%m-%d")
+                    estado_inicial = "Pagado" if tipo_pago == "Contado" else "Pendiente"
+                    
+                    cursor.execute('''
+                        INSERT OR IGNORE INTO proveedores (rif, razon_social, direccion, telefono)
+                        VALUES (?, ?, ?, ?)
+                    ''', (rif_real, nombre_real, direccion_real, telefono_real))
+                    
+                    cursor.execute('''
+                        INSERT INTO compras (
+                            tipo_doc, num_documento, num_control, proveedor_rif, proveedor_nombre, 
+                            fecha_compra, monto_total, base_imponible, monto_iva, retencion_applied, 
+                            tipo_pago, estado
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        tipo_documento, factura_en_memoria, num_control.strip(), rif_real, nombre_real,
+                        fecha_emision_str, monto_completo_factura, base_imponible_total, monto_iva_total, 
+                        retencion_total, tipo_pago, estado_inicial
+                    ))
+                    
+                    id_compra_maestra = cursor.lastrowid
+                    
+                    if tipo_pago == "Crédito":
+                        fecha_vencimiento = (fecha_documento_fisco + timedelta(days=dias_credito)).strftime("%Y-%m-%d")
+                        cursor.execute('''
+                            INSERT INTO cuentas_por_pagar (
+                                id_compra, proveedor, num_factura, monto_original, saldo_pendiente, fecha_vencimiento, estado
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                        ''', (id_compra_maestra, nombre_real, f"{tipo_documento[0]}# {factura_en_memoria}", neto_a_proveedor_cxp, neto_a_proveedor_cxp, fecha_vencimiento, "Pendiente"))
+                    
+                    cursor.execute("SELECT codigo, descripcion, cantidad, costo_unitario, clasificacion, unidad, precio_venta FROM carrito_temporal")
+                    filas_carrito = cursor.fetchall()
+                    
+                    for item in filas_carrito:
+                        i_cod, i_des, i_cant, i_costo, i_clas, i_und, i_pv = item
+                        cursor.execute('''
+                            INSERT OR IGNORE INTO inventario (codigo, descripcion, existencia, costo, precio, sucursal, clasificacion, unidad, stock_minimo)
+                            VALUES (?, ?, 0.0, ?, ?, 'Tienda Principal', ?, ?, 0.0)
+                        ''', (i_cod, i_des, i_costo, i_pv, i_clas, i_und))
+
+                        cursor.execute('''
+                            UPDATE inventario SET existencia = existencia + ?, costo = ?, precio = CASE WHEN ? > 0 THEN ? ELSE precio END
+                            WHERE codigo = ? AND sucursal = 'Tienda Principal'
+                        ''', (i_cant, i_costo, i_pv, i_pv, i_cod))
+                        
+                        cursor.execute('''
+                            INSERT INTO movimientos (fecha, codigo, tipo_movimiento, cantidad, sucursal) 
+                            VALUES (?, ?, ?, ?, 'Tienda Principal')
+                        ''', (fecha_emision_str, i_cod, f"COMPRA ({tipo_documento} #{factura_en_memoria})", i_cant))
+
+                    cursor.execute("DELETE FROM carrito_temporal")
+                    conn.commit()
+                    conn.close()
+                    st.success("🎉 ¡Documento procesado con éxito! Inventario actualizado sin distorsión fiscal.")
+                    st.balloons()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error crítico en Base de Datos: {str(e)}")
+    else:
+        st.info("💡 El carrito de compras está vacío. Agregue productos arriba para habilitar el registro.")
+
+# =========================================================================
+# --- PESTAÑA 4: CUENTAS POR PAGAR (CxP) ---
+# =========================================================================
+with tab_cxp:
+    st.markdown("### 📊 Panel de Control de Cuentas por Pagar (Proveedores)")
+    
+    query_cxp = """
+        SELECT id AS 'ID Deuda', 
+               proveedor AS 'Proveedor', 
+               num_factura AS 'Doc. Referencia', 
+               monto_original AS 'Monto (USD)', 
+               saldo_pendiente AS 'Saldo Pendiente (USD)', 
+               fecha_vencimiento AS 'Vencimiento', 
+               estado AS 'Estado' 
+        FROM cuentas_por_pagar 
+        ORDER BY fecha_vencimiento ASC
+    """
+    
+    try:
+        conn_cxp = conectar_db()
+        df_cxp = pd.read_sql_query(query_cxp, conn_cxp)
+        conn_cxp.close()
+
+        if not df_cxp.empty:
+            total_deuda = df_cxp[df_cxp['Estado'] == 'Pendiente']['Saldo Pendiente (USD)'].astype(float).sum()
+            st.metric(label="🔴 Total Deuda Comercial Pendiente", value=f"${total_deuda:,.2f} USD")
+            st.dataframe(df_cxp, use_container_width=True)
+        else:
+            st.success("🎉 ¡No hay cuentas pendientes por pagar en este momento!")
+    except Exception as e:
+        st.error(f"Error al cargar módulo de CxP: {str(e)}")
+
+# --- PESTAÑA 5: CLASIFICACIONES ---
+with tab_categorias:
+    st.markdown("### ⚙️ Gestión de Clasificaciones")
+    st.write("Administra las familias o categorías de los productos de tu inventario.")
+    
+    # Formulario para agregar una nueva categoría
+    with st.form(key="form_nueva_categoria"):
+        nueva_cat = st.text_input("Nombre de la Nueva Categoría", placeholder="Ej: Solventes")
+        btn_guardar_cat = st.form_submit_button("💾 Guardar Categoría")
+        
+        if btn_guardar_cat:
+            if nueva_cat.strip() != "":
+                conn_cat = sqlite3.connect("mi_negocio.db")
+                cursor_cat = conn_cat.cursor()
+                try:
+                    cursor_cat.execute("INSERT INTO categorias (nombre) VALUES (?)", (nueva_cat.strip().upper(),))
+                    conn_cat.commit()
+                    st.success(f"✅ Categoría '{nueva_cat.upper()}' registrada con éxito.")
+                except sqlite3.IntegrityError:
+                    st.error("⚠️ Esta categoría ya se encuentra registrada.")
+                conn_cat.close()
+                st.rerun()
+            else:
+                st.error("Por favor, ingresa un nombre válido.")
+
+    st.markdown("---")
+    st.markdown("#### 📁 Categorías Activas Actuales")
+    conn_show_c = sqlite3.connect("mi_negocio.db")
+    df_cat_show = pd.read_sql_query("SELECT nombre as 'Categorías Activas' FROM categorias ORDER BY nombre ASC", conn_show_c)
+    conn_show_c.close()
+    st.dataframe(df_cat_show, use_container_width=True)
+
+# --- PESTAÑA 7: HISTORIAL DE MOVIMIENTOS ---
+with tab_historial:
+    st.markdown("### 📜 Auditoría de Movimientos")
+    conn_movs = sqlite3.connect("mi_negocio.db")
+    df_movs = pd.read_sql_query("SELECT fecha as 'Fecha', codigo as 'Código', tipo_movimiento as 'Movimiento', cantidad as 'Cantidad' FROM movimientos ORDER BY fecha DESC", conn_movs)
+    conn_movs.close()
+    st.dataframe(df_movs, use_container_width=True)
+
+# --- PESTAÑA 8: PANEL EXCLUSIVO DE CONTROL GERENCIAL ---
+with tab_gerente:
+    st.markdown("### 🔒 Administración Crítica del Sistema")
+    
+    if "msg" in st.session_state:
+        st.success(st.session_state["msg"])
+        del st.session_state["msg"]
+
+    clave = st.text_input("Ingrese la clave de Administrador", type="password", key="p_g_pass")
+
+    if clave == "Shaddai2026":
+        st.success("🔓 Acceso Concedido")
+        
+        st.markdown("---")
+        st.subheader("📦 Ajuste de Inventario (Descarga Justificada)")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            buscar = st.text_input("Buscar producto (Código o Descripción)")
+        with col2:
+            cantidad_restar = st.number_input("Cantidad a restar", min_value=0.1, step=0.1)
+            
+        justificacion = st.text_area("Justificación del ajuste (Obligatorio para auditoría)")
+
+        if buscar:
+            termino = f"%{buscar.upper()}%"
+            conn = conectar_db()
+            # Usamos los nombres reales de columna: codigo, descripcion, existencia
+            df = pd.read_sql_query("""
+                SELECT codigo, descripcion, existencia 
+                FROM inventario 
+                WHERE UPPER(descripcion) LIKE ? OR UPPER(codigo) LIKE ?
+            """, conn, params=(termino, termino))
+            conn.close()
+            
+            if not df.empty:
+                st.dataframe(df, width=800)
+            else:
+                st.warning("Producto no encontrado.")
+
+        if st.button("📉 Aplicar Descarga de Inventario"):
+            if justificacion and len(justificacion) > 10:
+                conn = conectar_db()
+                cursor = conn.cursor()
+                # Actualizamos la columna real 'existencia'
+                cursor.execute("""
+                    UPDATE inventario 
+                    SET existencia = existencia - ? 
+                    WHERE UPPER(descripcion) LIKE ? OR UPPER(codigo) LIKE ?
+                """, (cantidad_restar, f"%{buscar.upper()}%", f"%{buscar.upper()}%"))
+                
+                # Aquí podrías insertar en una tabla de auditoría si la tienes
+                conn.commit()
+                conn.close()
+                st.session_state["msg"] = "✅ Ajuste aplicado y registrado en auditoría."
+                st.rerun()
+            else:
+                st.error("⚠️ Debe escribir una justificación válida para el reporte.")
+                
+    elif clave:
+        st.error("❌ Clave incorrecta.")
