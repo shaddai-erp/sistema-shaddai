@@ -1027,7 +1027,7 @@ elif menu == "Compras":
                 st.subheader("Detalle del Producto y Costos")
                 
                 try:
-                   elif menu == "Inventario":
+    elif menu == "Inventario":
     st.header("📦 Módulo de Inventario")
     
     # Creamos las pestañas incluyendo la nueva de carga masiva
