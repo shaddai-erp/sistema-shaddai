@@ -1027,10 +1027,219 @@ elif menu == "Compras":
                 st.subheader("Detalle del Producto y Costos")
                 
                 try:
-                    cursor.execute('SELECT SKU, DESCRIPCION FROM inventario WHERE empresa_id = ?', (empresa_actual,))
-                    productos_inv = cursor.fetchall()
-                except:
-                    productos_inv = []
+                   elif menu == "Inventario":
+    st.header("📦 Módulo de Inventario")
+    
+    # Creamos las pestañas incluyendo la nueva de carga masiva
+    tab1, tab2, tab3, tab4 = st.tabs(["Consultar / Alertas", "Registrar Producto", "Ajuste Físico (Autorizado)", "Carga Masiva Excel"])
+    
+    with tab1:
+        st.subheader("Existencia Actual y Alertas de Stock")
+           # 🔍 PEGA LA BARRITA DE BÚSQUEDA AQUÍ:
+    busq_inv = st.text_input("🔍 Buscar por SKU o Descripción:")
+
+    try:
+        # Obtenemos la empresa actual de la sesión
+        empresa_actual = st.session_state.get("usuario", "general")
+        
+        # Conectamos a la base de datos y filtramos por la empresa logueada
+        conn = sqlite3.connect("mi_negocio.db")
+        df_inventario = pd.read_sql_query(
+            "SELECT * FROM inventario WHERE empresa_id = ?", 
+            conn, 
+            params=(empresa_actual,)
+        )
+        conn.close()
+
+        if not df_inventario.empty:
+            # Si escribes algo en la barra, filtramos la tabla
+            if busq_inv:
+                df_filtrado = df_inventario[
+                    df_inventario['SKU'].astype(str).str.contains(busq_inv, case=False, na=False) | 
+                    df_inventario['DESCRIPCION'].astype(str).str.contains(busq_inv, case=False, na=False)
+                ]
+                st.dataframe(df_filtrado, use_container_width=True)
+            else:
+                # Mostramos la tabla completa si no hay nada escrito
+                st.dataframe(df_inventario, use_container_width=True)
+                
+            # Opcional: Un indicador rápido de productos totales cargados
+            st.info(f"Total de registros en inventario: {len(df_inventario)}")
+        else:
+            st.warning("La base de datos está vacía. Sube un archivo en la pestaña...")
+            
+    except Exception as e:
+        st.error(f"Error al cargar el inventario: {e}")
+        
+        try:
+            # Conectamos a la base de datos y leemos la tabla inventario
+            conn = sqlite3.connect("mi_negocio.db")
+            df_inventario = pd.read_sql_query("SELECT * FROM inventario", conn)
+            conn.close()
+            
+            if not df_inventario.empty:
+                # Mostramos la tabla completa de forma interactiva
+                st.dataframe(df_inventario, use_container_width=True)
+                
+                # Opcional: Un indicador rápido de productos totales cargados
+                st.info(f"Total de registros en inventario: {len(df_inventario)}")
+            else:
+                st.warning("La base de datos está vacía. Sube un archivo en la pestaña 'Carga Masiva Excel'.")
+                
+        except Exception as e:
+            st.info("Aún no hay una base de datos creada. Sube tu archivo Excel en la pestaña 'Carga Masiva Excel' para comenzar.")
+        
+    with tab2:
+        st.subheader("Registrar Producto Individual")
+        
+        with st.form("form_nuevo_producto"):
+            col1, col2 = st.columns(2)
+            with col1:
+                sku_nuevo = st.text_input("SKU / Código del Producto")
+                desc_nueva = st.text_input("Descripción del Producto")
+                ubicacion_nueva = st.text_input("Ubicación en Tienda / Almacén", value="CUA")
+            with col2:
+                costo_nuevo = st.number_input("Costo Unitario", min_value=0.0, format="%.4f")
+                precio_nuevo = st.number_input("Precio de Venta", min_value=0.0, format="%.4f")
+                cantidad_nueva = st.number_input("Cantidad Inicial (Stock)", min_value=0.0, format="%.2f")
+            
+            # Datos adicionales opcionales según tu estructura de Excel
+            unid_medida = st.selectbox("Unidad de Medida", ["UNIDAD", "GALON", "LITRO", "ML", "METRO", "KG"])
+            
+            btn_guardar_prod = st.form_submit_button("💾 Guardar Producto en Inventario")
+            
+            if btn_guardar_prod:
+                if sku_nuevo and desc_nueva:
+                    try:
+                        conn = sqlite3.connect("mi_negocio.db")
+                        cursor = conn.cursor()
+                        
+                        # Insertar el nuevo producto respetando las columnas de tu tabla
+                        cursor.execute('''
+                            INSERT INTO inventario (SKU, DESCRIPCION, UBICACION, COSTO, PRECIO, "INV INICIAL", "UNID MEDIDA")
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                        ''', (sku_nuevo, desc_nueva.upper(), ubicacion_nueva.upper(), costo_nuevo, precio_nuevo, cantidad_nueva, unid_medida))
+                        
+                        conn.commit()
+                        conn.close()
+                        st.success(f"¡El producto '{desc_nueva}' ha sido registrado exitosamente!")
+                    except Exception as e:
+                        st.error(f"Error al registrar el producto: {e}")
+                else:
+                    st.warning("Por lo menos debes rellenar el SKU y la Descripción del producto.")
+        
+    with tab3:
+        st.subheader("Ajuste Físico de Inventario")
+        st.markdown("Esta sección está restringida. Permite cargar o descargar inventario físico por diferencias de conteo, dejando un concepto y un responsable.")
+        
+        with st.form("form_ajuste_fisico"):
+            # 1. SEGURIDAD: Clave de acceso
+            clave_ingresada = st.text_input("Clave de Autorización", type="password")
+            
+            st.markdown("---")
+            
+            # 2. DATOS DEL AJUSTE
+            col1, col2 = st.columns(2)
+            with col1:
+                sku_ajuste = st.text_input("SKU del Producto a Ajustar")
+                tipo_movimiento = st.selectbox("Tipo de Ajuste", ["Carga (Sumar al inventario)", "Descarga (Restar del inventario)"])
+                cantidad_ajuste = st.number_input("Cantidad a Ajustar", min_value=0.01, format="%.2f")
+            with col2:
+                concepto_ajuste = st.selectbox("Concepto", ["Diferencia en conteo físico", "Merma / Daño", "Robo / Extravío", "Error de carga anterior", "Devolución sin factura"])
+                responsable = st.text_input("Responsable / Firma (Nombre y Apellido)")
+                observacion_extra = st.text_input("Observación adicional (Opcional)")
+            
+            btn_ejecutar_ajuste = st.form_submit_button("⚖️ Aplicar Ajuste Físico")
+            
+            if btn_ejecutar_ajuste:
+                # Clave temporal de administrador (puedes cambiarla por la que prefieras)
+                CLAVE_AUTORIZADA = "Shaddai2021*" 
+                
+                if clave_ingresada == CLAVE_AUTORIZADA:
+                    if sku_ajuste and responsable:
+                        try:
+                            conn = sqlite3.connect("mi_negocio.db")
+                            cursor = conn.cursor()
+                            
+                            # Verificamos si el producto existe en la base de datos
+                            cursor.execute('SELECT "INV INICIAL", DESCRIPCION FROM inventario WHERE SKU = ?', (sku_ajuste,))
+                            resultado = cursor.fetchone()
+                            
+                            if resultado:
+                                stock_actual = resultado[0]
+                                desc_producto = resultado[1]
+                                
+                                # Calculamos el nuevo stock según sea carga o descarga
+                                if "Carga" in tipo_movimiento:
+                                    nuevo_stock = stock_actual + cantidad_ajuste
+                                else:
+                                    nuevo_stock = stock_actual - cantidad_ajuste
+                                    if nuevo_stock < 0:
+                                        nuevo_stock = 0 # Evitar stock negativo por seguridad
+                                        
+                                # Actualizamos el inventario en la tabla
+                                cursor.execute('UPDATE inventario SET "INV INICIAL" = ? WHERE SKU = ?', (nuevo_stock, sku_ajuste))
+                                
+                                # Opcional: Podrías guardar un historial de auditoría si lo deseas luego
+                                
+                                conn.commit()
+                                conn.close()
+                                
+                                st.success(f"✅ Ajuste realizado con éxito en '{desc_producto}'. Stock anterior: {stock_actual} | Nuevo Stock: {nuevo_stock}")
+                                st.info(f"Registrado bajo el concepto de *{concepto_ajuste}* por el responsable: *{responsable}*.")
+                            else:
+                                conn.close()
+                                st.error("❌ El SKU ingresado no se encuentra registrado en el inventario.")
+                        except Exception as e:
+                            st.error(f"Error al procesar el ajuste en la base de datos: {e}")
+                    else:
+                        st.warning("⚠️ Debes rellenar obligatoriamente el SKU y el nombre del Responsable/Firma.")
+                else:
+                    st.error("🔒 Clave de autorización incorrecta. No se puede realizar el ajuste.")
+        
+    with tab4:
+        st.subheader("Carga Masiva de Inventario mediante Excel")
+        st.markdown("Sube tu archivo de Excel para actualizar todo el inventario de una sola vez.")
+        
+        # 1. DESCARGA DE PLANTILLA
+        df_plantilla = pd.DataFrame(columns=["SKU", "Nombre", "Cantidad", "Precio", "Costo"])
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df_plantilla.to_excel(writer, index=False, sheet_name='Inventario')
+        processed_data = output.getvalue()
+        
+        st.download_button(
+            label="📥 Descargar Plantilla de Excel",
+            data=processed_data,
+            file_name="plantilla_inventario_shaddai.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        
+        st.markdown("---")
+        
+        
+archivo_subido = st.file_uploader("Sube tu plantilla de Excel completada", type=["xlsx", "xls"])
+        
+if archivo_subido is not None:
+            try:
+                df_carga = pd.read_excel(archivo_subido)
+                st.write("Vista previa de los datos cargados:")
+                st.dataframe(df_carga.head())
+                
+                if st.button("💾 Procesar e Insertar en Base de Datos"):
+                    # Limpiamos los nombres de las columnas para evitar espacios o errores
+                    df_carga.columns = [str(c).strip().upper() for c in df_carga.columns]
+                    
+                    conn = sqlite3.connect("mi_negocio.db")
+                    df_carga.to_sql("inventario", conn, if_exists="replace", index=False)
+                    conn.close()
+                    
+                    st.success("¡Inventario cargado y guardado en la base de datos con éxito!")
+                    st.rerun() # Esto recarga automáticamente la pantalla para que aparezca la tabla de una vez
+                    
+            except Exception as e:
+                st.error(f"Error al procesar el archivo: {e}")
+ 
 
                 sku_opciones = [f"{p[0]} - {p[1]}" for p in productos_inv] if productos_inv else ["SIN-SKU - PRODUCTO GENERAL"]
                 prod_sel = st.selectbox("Seleccionar Producto (SKU - Descripción)", sku_opciones)
