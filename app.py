@@ -1028,9 +1028,10 @@ elif menu == "Compras":
                 
                 try:
                       cursor.execute('SELECT SKU, DESCRIPCION FROM inventario')
-            productos_inv = cursor.fetchall()
-        except:
-            productos_inv = []
+                      productos_inv = cursor.fetchall()
+               except:
+                   productos_inv = []
+                   
     elif menu == "Inventario":
     st.header("📦 Módulo de Inventario")
     
